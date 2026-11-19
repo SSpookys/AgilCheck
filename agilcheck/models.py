@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 INVEST_LETRAS = {
     "I": "Independente",
@@ -10,10 +10,14 @@ INVEST_LETRAS = {
     "T": "Testável",
 }
 
-
 class HistoriaInvalidaError(ValueError):
-    """Erro levantado quando uma história não atende aos campos obrigatórios."""
+    pass
 
+@dataclass
+class RegraDoRDoD:
+    id: Optional[int]
+    tipo: str  # "DoR" ou "DoD"
+    descricao: str
 
 @dataclass
 class Historia:
@@ -23,22 +27,14 @@ class Historia:
     acao: str
     beneficio: str
     pontos: int = 0
-    invest: Dict[str, bool] = field(
-        default_factory=lambda: {k: False for k in INVEST_LETRAS}
-    )
+    invest: Dict[str, bool] = field(default_factory=lambda: {k: False for k in INVEST_LETRAS})
+    dor_checklist: List[int] = field(default_factory=list) # IDs das regras de DoR atendidas
 
     def __post_init__(self):
-        # CORREÇÃO DO ERRO DA IA (registro de 10/11):
-        # o código gerado não validava campo vazio e salvava histórias em branco.
         self.validar()
 
     def validar(self) -> None:
-        campos = {
-            "titulo": self.titulo,
-            "papel": self.papel,
-            "acao": self.acao,
-            "beneficio": self.beneficio,
-        }
+        campos = {"titulo": self.titulo, "papel": self.papel, "acao": self.acao, "beneficio": self.beneficio}
         for nome, valor in campos.items():
             if valor is None or not str(valor).strip():
                 raise HistoriaInvalidaError(f"Campo obrigatório vazio: {nome}")

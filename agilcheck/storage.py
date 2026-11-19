@@ -1,41 +1,95 @@
+import sqlite3
+import json
 from typing import List, Optional
+from .models import Historia, RegraDoRDoD
 
-from .models import Historia
+class RepositorioSQLite:
+    def __init__(self, db_path: str = "agilcheck.db"):
+        self.db_path = db_path
+        self._criar_tabelas()
 
-
-class RepositorioMemoria:
-    """Armazenamento em memória — Sprint 1.
-
-    Sprint 2 vai trocar por SQLite mantendo a mesma interface pública,
-    para o app não precisar mudar.
-    """
-
-    def __init__(self) -> None:
-        self._historias: List[Historia] = []
-        self._proximo_id: int = 1
+    def _criar_tabelas(self):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS historias (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    titulo TEXT, papel TEXT, acao TEXT, beneficio TEXT,
+                    pontos INTEGER, invest TEXT, dor_checklist TEXT
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS regras (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tipo TEXT, descricao TEXT
+                )
+            ''')
 
     def adicionar(self, historia: Historia) -> Historia:
-        historia.id = self._proximo_id
-        self._proximo_id += 1
-        self._historias.append(historia)
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO historias (titulo, papel, acao, beneficio, pontos, invest, dor_checklist) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (historia.titulo, historia.papel, historia.acao, historia.beneficio, historia.pontos, 
+                 json.dumps(historia.invest), json.dumps(historia.dor_checklist))
+            )
+            historia.id = cursor.lastrowid
         return historia
 
     def listar(self) -> List[Historia]:
-        return list(self._historias)
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM historias")
+            rows = cursor.fetchall()
+        
+        historias = []
+        for row in rows:
+            historias.append(Historia(
+                id=row[0], titulo=row[1], papel=row[2], acao=row[3], beneficio=row[4], pontos=row[5],
+                invest=json.loads(row[6]), dor_checklist=json.loads(row[7])
+            ))
+        return historias
 
     def buscar_por_id(self, historia_id: int) -> Optional[Historia]:
-        for historia in self._historias:
-            if historia.id == historia_id:
-                return historia
+        for h in self.listar():
+            if h.id == historia_id:
+                return h
         return None
 
     def atualizar_invest(self, historia_id: int, invest: dict) -> Optional[Historia]:
-        historia = self.buscar_por_id(historia_id)
-        if historia is None:
-            return None
-        historia.invest.update(invest)
-        return historia
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE historias SET invest = ? WHERE id = ?", (json.dumps(invest), historia_id))
+        return self.buscar_por_id(historia_id)
+
+    def atualizar_dor(self, historia_id: int, dor_checklist: List[int]):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE historias SET dor_checklist = ? WHERE id = ?", (json.dumps(dor_checklist), historia_id))
 
     def limpar(self) -> None:
-        self._historias.clear()
-        self._proximo_id = 1
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("DELETE FROM historias")
+            conn.execute("DELETE FROM regras")
+
+    # --- Métodos para Regras (DoR/DoD) ---
+    def adicionar_regra(self, regra: RegraDoRDoD) -> RegraDoRDoD:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO regras (tipo, descricao) VALUES (?, ?)", (regra.tipo, regra.descricao))
+            regra.id = cursor.lastrowid
+        return regra
+
+    def listar_regras(self, tipo: str = None) -> List[RegraDoRDoD]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            if tipo:
+                cursor.execute("SELECT id, tipo, descricao FROM regras WHERE tipo = ?", (tipo,))
+            else:
+                cursor.execute("SELECT id, tipo, descricao FROM regras")
+            rows = cursor.fetchall()
+        return [RegraDoRDoD(id=r[0], tipo=r[1], descricao=r[2]) for r in rows]
+
+    def remover_regra(self, regra_id: int):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("DELETE FROM regras WHERE id = ?", (regra_id,))

@@ -15,7 +15,8 @@ class RepositorioSQLite:
                 CREATE TABLE IF NOT EXISTS historias (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     titulo TEXT, papel TEXT, acao TEXT, beneficio TEXT,
-                    pontos INTEGER, invest TEXT, dor_checklist TEXT
+                    pontos INTEGER, invest TEXT, dor_checklist TEXT,
+                    status TEXT DEFAULT 'A Fazer', dod_checklist TEXT DEFAULT '[]'
                 )
             ''')
             cursor.execute('''
@@ -24,14 +25,20 @@ class RepositorioSQLite:
                     tipo TEXT, descricao TEXT
                 )
             ''')
+            # Migração para bancos criados na Sprint 2
+            try:
+                cursor.execute("ALTER TABLE historias ADD COLUMN status TEXT DEFAULT 'A Fazer'")
+                cursor.execute("ALTER TABLE historias ADD COLUMN dod_checklist TEXT DEFAULT '[]'")
+            except sqlite3.OperationalError:
+                pass
 
     def adicionar(self, historia: Historia) -> Historia:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO historias (titulo, papel, acao, beneficio, pontos, invest, dor_checklist) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO historias (titulo, papel, acao, beneficio, pontos, invest, dor_checklist, status, dod_checklist) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (historia.titulo, historia.papel, historia.acao, historia.beneficio, historia.pontos, 
-                 json.dumps(historia.invest), json.dumps(historia.dor_checklist))
+                 json.dumps(historia.invest), json.dumps(historia.dor_checklist), historia.status, json.dumps(historia.dod_checklist))
             )
             historia.id = cursor.lastrowid
         return historia
@@ -46,7 +53,8 @@ class RepositorioSQLite:
         for row in rows:
             historias.append(Historia(
                 id=row[0], titulo=row[1], papel=row[2], acao=row[3], beneficio=row[4], pontos=row[5],
-                invest=json.loads(row[6]), dor_checklist=json.loads(row[7])
+                invest=json.loads(row[6]), dor_checklist=json.loads(row[7]),
+                status=row[8] if row[8] else "A Fazer", dod_checklist=json.loads(row[9]) if row[9] else []
             ))
         return historias
 
@@ -62,17 +70,21 @@ class RepositorioSQLite:
             cursor.execute("UPDATE historias SET invest = ? WHERE id = ?", (json.dumps(invest), historia_id))
         return self.buscar_por_id(historia_id)
 
-    def atualizar_dor(self, historia_id: int, dor_checklist: List[int]):
+    def atualizar_status(self, historia_id: int, novo_status: str):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("UPDATE historias SET dor_checklist = ? WHERE id = ?", (json.dumps(dor_checklist), historia_id))
+            cursor.execute("UPDATE historias SET status = ? WHERE id = ?", (novo_status, historia_id))
+
+    def atualizar_dod(self, historia_id: int, dod_checklist: List[int]):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE historias SET dod_checklist = ? WHERE id = ?", (json.dumps(dod_checklist), historia_id))
 
     def limpar(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("DELETE FROM historias")
             conn.execute("DELETE FROM regras")
 
-    # --- Métodos para Regras (DoR/DoD) ---
     def adicionar_regra(self, regra: RegraDoRDoD) -> RegraDoRDoD:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()

@@ -28,7 +28,9 @@ class Historia:
     beneficio: str
     pontos: int = 0
     invest: Dict[str, bool] = field(default_factory=lambda: {k: False for k in INVEST_LETRAS})
-    dor_checklist: List[int] = field(default_factory=list) # IDs das regras de DoR atendidas
+    dor_checklist: List[int] = field(default_factory=list)
+    status: str = "A Fazer" # Novo campo para o Board Kanban
+    dod_checklist: List[int] = field(default_factory=list) # Novo campo para o Verificador de DoD
 
     def __post_init__(self):
         self.validar()

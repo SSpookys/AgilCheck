@@ -6,3 +6,4 @@ venv/
 .env
 *.sqlite
 .streamlit/secrets.toml
+*.db

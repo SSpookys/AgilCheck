@@ -197,3 +197,9 @@ elif aba == "Board Kanban":
                             if st.form_submit_button("Cancelar"):
                                 del st.session_state[f"check_dod_{h.id}"]
                                 st.rerun()
+                                # Botão para resetar o banco (útil para testes e apresentação)
+st.sidebar.markdown("---")
+if st.sidebar.button("🗑️ Limpar Banco de Dados"):
+    repo.limpar()
+    st.sidebar.success("Banco de dados limpo!")
+    st.rerun()

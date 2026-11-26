@@ -11,6 +11,16 @@ def repo(tmp_path):
     yield r
     # Não precisa chamar r.limpar(), pois o pytest apaga a pasta tmp_path sozinho.
 
+def test_atualizar_status_e_dod(repo):
+    h = repo.adicionar(_historia())
+    repo.atualizar_status(h.id, "Concluído")
+    h_atualizada = repo.buscar_por_id(h.id)
+    assert h_atualizada.status == "Concluído"
+    
+    repo.atualizar_dod(h.id, [1, 2])
+    h_atualizada = repo.buscar_por_id(h.id)
+    assert h_atualizada.dod_checklist == [1, 2]
+
 def _historia(titulo="t", dor=None):
     return Historia(id=None, titulo=titulo, papel="PO", acao="a", beneficio="b", dor_checklist=dor or [])
 
@@ -35,3 +45,5 @@ def test_regras_dor_dod(repo):
     assert len(repo.listar_regras("DoR")) == 1
     assert len(repo.listar_regras("DoD")) == 1
     assert len(repo.listar_regras()) == 2
+
+    

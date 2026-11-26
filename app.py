@@ -14,16 +14,15 @@ st.caption("Validação de histórias de usuário — INVEST, DoR e DoD")
 
 aba = st.sidebar.radio(
     "Navegação",
-    ["Cadastrar História", "Listar Histórias", "Checklist INVEST", "Regras DoR / DoD"]
+    ["Cadastrar História", "Listar Histórias", "Checklist INVEST", "Regras DoR / DoD", "Board Kanban"]
 )
 
-# ---------- Aba Regras (Nova - #3) ----------
+# ---------- Aba Regras ----------
 if aba == "Regras DoR / DoD":
     st.header("Configuração de Regras")
-    
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Regras de DoR (Definition of Ready)")
+        st.subheader("Regras de DoR")
         with st.form("form_dor"):
             desc_dor = st.text_input("Nova regra de DoR")
             if st.form_submit_button("Adicionar DoR") and desc_dor.strip():
@@ -37,7 +36,7 @@ if aba == "Regras DoR / DoD":
                 st.rerun()
 
     with col2:
-        st.subheader("Regras de DoD (Definition of Done)")
+        st.subheader("Regras de DoD")
         with st.form("form_dod"):
             desc_dod = st.text_input("Nova regra de DoD")
             if st.form_submit_button("Adicionar DoD") and desc_dod.strip():
@@ -68,7 +67,6 @@ elif aba == "Cadastrar História":
             for r in regras_dor:
                 if st.checkbox(r.descricao, key=f"new_dor_{r.id}"):
                     dor_marcada.append(r.id)
-        
         enviado = st.form_submit_button("Salvar história")
 
     if enviado:
@@ -79,11 +77,10 @@ elif aba == "Cadastrar História":
             )
             repo.adicionar(historia)
             st.success(f"História #{historia.id} salva com sucesso.")
-            st.code(historia.texto_historia)
         except HistoriaInvalidaError as erro:
             st.error(f"Não foi possível salvar: {erro}")
 
-# ---------- Aba 2: listagem (com progresso da DoR - #4) ----------
+# ---------- Aba 2: listagem ----------
 elif aba == "Listar Histórias":
     st.header("Histórias cadastradas")
     historias = repo.listar()
@@ -93,29 +90,19 @@ elif aba == "Listar Histórias":
         st.info("Nenhuma história cadastrada ainda.")
     else:
         for historia in historias:
-            with st.expander(f"#{historia.id} — {historia.titulo} ({historia.pontos} pts)"):
+            with st.expander(f"#{historia.id} — {historia.titulo} ({historia.pontos} pts) - {historia.status}"):
                 st.write(historia.texto_historia)
-                
-                # Barra de Progresso DoR
                 if regras_dor:
                     total_dor = len(regras_dor)
                     marcadas = len(historia.dor_checklist)
-                    percentual = int((marcadas / total_dor) * 100)
+                    percentual = int((marcadas / total_dor) * 100) if total_dor > 0 else 0
                     st.write(f"**Progresso da DoR:** {percentual}%")
                     st.progress(percentual / 100)
-                    
-                    for r in regras_dor:
-                        status = "✅" if r.id in historia.dor_checklist else "❌"
-                        st.write(f"{status} {r.descricao}")
-
-                status_invest = "Sim" if invest_completo(historia.invest) else "Não"
-                st.write(f"**Invest completo:** {status_invest}")
 
 # ---------- Aba 3: checklist INVEST ----------
 elif aba == "Checklist INVEST":
     st.header("Checklist INVEST")
     historias = repo.listar()
-
     if not historias:
         st.info("Cadastre uma história primeiro.")
     else:
@@ -124,18 +111,89 @@ elif aba == "Checklist INVEST":
         historia = repo.buscar_por_id(opcoes[escolha])
 
         if historia:
-            st.write(f"**História:** {historia.texto_historia}")
             novo_invest = {}
             for letra, nome in INVEST_LETRAS.items():
-                novo_invest[letra] = st.checkbox(
-                    f"{letra} — {nome}", value=historia.invest.get(letra, False), key=f"invest_{historia.id}_{letra}"
-                )
-
-            percentual = percentual_invest(novo_invest)
-            st.progress(percentual / 100)
-            pendentes = letras_pendentes(novo_invest)
-            st.write(f"INVEST: **{percentual}%** — pendentes: {', '.join(pendentes) if pendentes else 'nenhuma'}")
-
+                novo_invest[letra] = st.checkbox(f"{letra} — {nome}", value=historia.invest.get(letra, False), key=f"invest_{historia.id}_{letra}")
             if st.button("Salvar checklist"):
                 repo.atualizar_invest(historia.id, novo_invest)
                 st.success("Checklist atualizado.")
+
+# ---------- Aba 4: Board Kanban (#6) e Verificador de DoD (#5) ----------
+elif aba == "Board Kanban":
+    st.header("Board Kanban Visual")
+    historias = repo.listar()
+    regras_dod = repo.listar_regras("DoD")
+    
+    colunas = ["A Fazer", "Em Andamento", "Em Teste", "Concluído"]
+    wip_limits = {"A Fazer": 999, "Em Andamento": 3, "Em Teste": 2, "Concluído": 999}
+    
+    cols = st.columns(4)
+    
+    for i, coluna in enumerate(colunas):
+        with cols[i]:
+            cards_na_coluna = [h for h in historias if h.status == coluna]
+            qtd = len(cards_na_coluna)
+            wip_text = f"({qtd}/{wip_limits[coluna]})" if wip_limits[coluna] < 999 else f"({qtd})"
+            
+            st.subheader(f"{coluna} {wip_text}")
+            if qtd > wip_limits[coluna]:
+                st.error("⚠️ WIP Estourado!")
+            
+            for h in cards_na_coluna:
+                with st.container(border=True):
+                    st.write(f"**#{h.id} - {h.titulo}**")
+                    st.caption(f"{h.pontos} pts | INVEST: {h.invest_percentual}%")
+                    
+                    c1, c2 = st.columns(2)
+                    idx = colunas.index(coluna)
+                    
+                    # Botão Voltar
+                    if idx > 0:
+                        if c1.button("⬅️", key=f"back_{h.id}", use_container_width=True):
+                            repo.atualizar_status(h.id, colunas[idx-1])
+                            st.rerun()
+                            
+                    # Botão Avançar
+                    if idx < 3:
+                        if idx == 2: # Tentando ir para Concluído -> Exige DoD
+                            if c2.button("✅ Concluir", key=f"fwd_{h.id}", use_container_width=True):
+                                st.session_state[f"check_dod_{h.id}"] = True
+                                st.rerun()
+                        else: # Movimentação normal
+                            if c2.button("➡️", key=f"fwd_{h.id}", use_container_width=True):
+                                prox_coluna = colunas[idx+1]
+                                qtd_prox = len([x for x in historias if x.status == prox_coluna])
+                                if qtd_prox >= wip_limits[prox_coluna]:
+                                    st.error(f"WIP de '{prox_coluna}' atingido! Não é possível mover.")
+                                else:
+                                    repo.atualizar_status(h.id, prox_coluna)
+                                    st.rerun()
+                    
+                    # Modal de Verificação de DoD (#5)
+                    if st.session_state.get(f"check_dod_{h.id}", False):
+                        with st.form(f"form_dod_{h.id}"):
+                            st.write("**Verificação de DoD**")
+                            if not regras_dod:
+                                st.warning("Nenhuma regra de DoD cadastrada.")
+                                if st.form_submit_button("Concluir sem regras"):
+                                    repo.atualizar_status(h.id, "Concluído")
+                                    del st.session_state[f"check_dod_{h.id}"]
+                                    st.rerun()
+                            else:
+                                dod_marcada = []
+                                for r in regras_dod:
+                                    if st.checkbox(r.descricao, key=f"chk_dod_{h.id}_{r.id}"):
+                                        dod_marcada.append(r.id)
+                                        
+                                if st.form_submit_button("Salvar e Concluir"):
+                                    if len(dod_marcada) < len(regras_dod):
+                                        st.error("A história não atende a todos os critérios de DoD.")
+                                    else:
+                                        repo.atualizar_dod(h.id, dod_marcada)
+                                        repo.atualizar_status(h.id, "Concluído")
+                                        del st.session_state[f"check_dod_{h.id}"]
+                                        st.rerun()
+                            
+                            if st.form_submit_button("Cancelar"):
+                                del st.session_state[f"check_dod_{h.id}"]
+                                st.rerun()
